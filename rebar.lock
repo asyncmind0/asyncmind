@@ -1,0 +1,20 @@
+{"1.2.0",
+[{<<"cowlib">>,
+  {git,"https://github.com/ninenines/cowlib",
+       {ref,"e9448e5628c8c1d9083223ff973af8de31a566d1"}},
+  1},
+ {<<"erlexec">>,{pkg,<<"erlexec">>,<<"1.20.1">>},0},
+ {<<"gun">>,
+  {git,"https://github.com/ninenines/gun.git",
+       {ref,"5a175dc6d5c0beddb78900b2d4ad817c9be7c2df"}},
+  0},
+ {<<"jsx">>,
+  {git,"https://github.com/talentdeficit/jsx.git",
+       {ref,"b1289a16ae3fed51b9f722cbfb6f412c3131f540"}},
+  0}]}.
+[
+{pkg_hash,[
+ {<<"erlexec">>, <<"27A9F39F2C27840B8306C94635190AAE4D172C9B7359FA9495789F28E1D5AE89">>}]},
+{pkg_hash_ext,[
+ {<<"erlexec">>, <<"79DBEED6EC980DD105CD502C818CF414C6D7CB10A90B5AD2734FD09977FE6DC9">>}]}
+].
