@@ -50,12 +50,11 @@ pactl_mute_sink(Sink, Mute) ->
 
 % Check if the current workspace is the given name
 i3_is_current_workspace(Name) ->
-    case os:cmd("i3-msg -t get_workspaces | jq '.[] | select(.focused==true).name==\"" ++ Name ++ "\"'") of
-        "true\n" ->
-            true;
-        _ ->
-            false
-    end.
+  case
+  os:cmd("i3-msg -t get_workspaces | jq '.[] | select(.focused==true).name==\"" ++ Name ++ "\"'") of
+    "true\n" -> true;
+    _ -> false
+  end.
 
 
 handle_call({dnd, on}, _From, State) ->
@@ -195,27 +194,30 @@ handle_call({mpc, _Args}, _From, State) ->
   exec:send(Pid, <<"bar\n">>),
   exec:send(Pid, eof),
   Return;
+
 % Switch to a workspace with the given name and open st terminal with the given title
 handle_call({i3_switch_to_workspace, [Workspace, Title]}, From, State) ->
-    case os:cmd("wmctrl -l | grep \"" ++ Title ++ "\" | wc -l") of
-        "0\n" ->
-            os:cmd("i3-msg \"workspace " ++ Workspace ++ "; exec st -t '" ++ Title ++ "'\""),
-            ok;
-        _ ->
-            os:cmd("i3-msg \"workspace " ++ Workspace ++ "\""),
-            case i3_is_current_workspace(Workspace) of
-                true ->
-                    os:cmd("i3-msg \"workspace back_and_forth\""),
-                    ok;
-                false ->
-                    ok
-            end
-    end,
+  case os:cmd("wmctrl -l | grep \"" ++ Title ++ "\" | wc -l") of
+    "0\n" ->
+      os:cmd("i3-msg \"workspace " ++ Workspace ++ "; exec st -t '" ++ Title ++ "'\""),
+      ok;
+
+    _ ->
+      os:cmd("i3-msg \"workspace " ++ Workspace ++ "\""),
+      case i3_is_current_workspace(Workspace) of
+        true ->
+          os:cmd("i3-msg \"workspace back_and_forth\""),
+          ok;
+
+        false -> ok
+      end
+  end,
   {reply, [], State};
+
 handle_call({new_client, _Args}, _From, State) ->
-    Frame = wxFrame:new(wx:null(), -1, "My Root Window"),
-    wxFrame:show(Frame),
-    application:run();
+  Frame = wxFrame:new(wx:null(), -1, "My Root Window"),
+  wxFrame:show(Frame),
+  application:run();
 
 handle_call(_Request, _From, State) ->
   Reply = ok,
@@ -279,9 +281,13 @@ dnd(OnOff) ->
 browser(Url) ->
   gen_server:call(asyncmind, {browser, Url}),
   ok.
+
+
 toggle_window_screen(Workspace, Title) ->
   gen_server:call(asyncmind, {i3_switch_to_workspace, [Workspace, Title]}),
   ok.
+
+
 new_client() ->
-    gen_server:call(asyncmind, {new_client, []}),
-    ok.
+  gen_server:call(asyncmind, {new_client, []}),
+  ok.
