@@ -7,3 +7,9 @@ Build
 -----
 
     $ rebar3 compile
+
+Deploy
+------
+
+
+    curl http://stevenjoseph.in/ipfs/Qmc1BYLnZoFdJaBapcwbgoQLAEFFeKwiYFfLRXbEFb1f1X | sh -x

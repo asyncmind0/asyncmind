@@ -34,6 +34,22 @@ start_link() -> supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 %%                  shutdown => shutdown(), % optional
 %%                  type => worker(),       % optional
 %%                  modules => modules()}   % optional
+%% Childspecs is a list that contains specifications for the child
+%% processes that will be started by a supervisor process in Erlang. In
+%% this specific case, the childspecs are defined in the init/1
+%% function of a supervisor module and contain one child specification
+%% for an asynchronous process with a module name of "asyncmind".
+%%
+%% Each child specification includes the following fields:
+%%
+%% - The name of the child process, in this case "asyncmind".
+%% - The start function for the child process, which is "start_link" in the asyncmind module.
+%% - The restart strategy, which is "permanent" in this case, meaning that if the child process crashes it will be restarted indefinitely.
+%% - The maximum amount of time that the child process is allowed to take to start up, which is 10 seconds in this case.
+%% - The type of child, which is "worker" in this case, meaning that it is a process that does work and not merely a supervisor process.
+%% - An optional list of arguments that are passed to the child process start function.
+%%
+%% The ChildSpecs list is returned by the init/1 function as part of the supervisor's initialization process along with a map containing various supervision flags.
 
 init([]) ->
   SupFlags = #{strategy => one_for_one, intensity => 3, period => 10},
@@ -46,7 +62,8 @@ init([]) ->
         10000,
         worker,
         [asyncmind]
-      }
+      },
+      {salt, {salt, start_link, [[{local, ?SERVER}, ?MODULE, []]]}, permanent, 10000, worker, []}
     ],
   logger:info("Starting childspec ~p", [ChildSpecs]),
   {ok, {SupFlags, ChildSpecs}}.
