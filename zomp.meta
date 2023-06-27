@@ -1,0 +1,17 @@
+{a_email,"steven@stevenjoseph.in"}.
+{author,"Steven Joseph"}.
+{c_email,"steven@stevenjoseph.in"}.
+{copyright,"Steven Joseph"}.
+{deps,[]}.
+{desc,"Kitchen sink for testing"}.
+{file_exts,[]}.
+{key_name,none}.
+{license,"GPL-3.0-or-later"}.
+{modules,[]}.
+{name,"asyncmind"}.
+{package_id,{"otpr","asyncmind",{0,1,0}}}.
+{prefix,"a"}.
+{repo_url,"https://github.com/jagguli/asyncmind"}.
+{tags,[]}.
+{type,gui}.
+{ws_url,[]}.
