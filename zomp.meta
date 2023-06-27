@@ -2,7 +2,13 @@
 {author,"Steven Joseph"}.
 {c_email,"steven@stevenjoseph.in"}.
 {copyright,"Steven Joseph"}.
-{deps,[]}.
+{deps,[{"otpr","getopt",{1,0,2}},
+       {"otpr","eblake2",{1,0,0}},
+       {"otpr","zj",{1,1,0}},
+       {"otpr","aeserialization",{0,1,0}},
+       {"otpr","aesophia",{7,1,2}},
+       {"otpr","aebytecode",{3,2,1}},
+       {"otpr","vanillae",{0,2,0}}]}.
 {desc,"Kitchen sink for testing"}.
 {file_exts,[]}.
 {key_name,none}.
