@@ -63,7 +63,30 @@ init([]) ->
         worker,
         [asyncmind]
       },
-      {salt, {salt, start_link, [[{local, ?SERVER}, ?MODULE, []]]}, permanent, 10000, worker, []}
+      {
+        salt,
+        {salt, start_link, [[{local, ?SERVER}, ?MODULE, []]]},
+        permanent,
+        10000,
+        worker,
+        []
+      },
+      {
+        dunst_notifier_user,
+        {salt, journal_monitor, [[{local, ?SERVER}, ?MODULE, []]]},
+        permanent,
+        10000,
+        worker,
+        [user]
+      },
+      {
+        dunst_notifier_system,
+        {salt, journal_monitor, [[{local, ?SERVER}, ?MODULE, []]]},
+        permanent,
+        10000,
+        worker,
+        [system]
+      }
     ],
   logger:info("Starting childspec ~p", [ChildSpecs]),
   {ok, {SupFlags, ChildSpecs}}.

@@ -29,7 +29,8 @@ start(_StartType, _StartArgs) ->
         }
       ]
     ),
-  {ok, _} = cowboy:start_clear(http, [{port, 9999}], #{env => #{dispatch => Dispatch}}),
+  {ok, WsPort} = application:get_env(asyncmind, ws_port),
+  {ok, _} = cowboy:start_clear(http, [{port, WsPort}], #{env => #{dispatch => Dispatch}}),
   asyncmind_sup:start_link().
 
 
