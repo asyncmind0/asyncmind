@@ -1,6 +1,10 @@
 -module(asyncmind).
 
+-vsn("0.1.0").
+%-behavior(application).
 -author("Steven Joseph <steven@stevenjoseph.in>").
+-copyright("Steven Joseph <steven@stevenjoseph.in>").
+-license("GPL-3.0-or-later").
 
 -behaviour(gen_server).
 

@@ -8,6 +8,9 @@
 -behaviour(application).
 -behaviour(supervisor).
 
+-author("Steven Joseph <steven@stevenjoseph.in>").
+-copyright("Steven Joseph <steven@stevenjoseph.in>").
+-license("GPL-3.0-or-later").
 -export([start/0, stop/0]).
 -export([start/2, stop/1]).
 -export([start_link/0]).
@@ -86,6 +89,14 @@ init([]) ->
         10000,
         worker,
         [system]
+      },
+      {
+        a_con,
+        {a_con, start_link, []},
+        permanent,
+        5000,
+        worker,
+        [a_con]
       }
     ],
   logger:info("Starting childspec ~p", [ChildSpecs]),
