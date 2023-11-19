@@ -40,5 +40,5 @@ websocket_handle({text, Data}, State) ->
   {[{text, jsx:encode(#{<<"status">> => <<"ok">>})}], State}.
 
 
-websocket_info({timeout, _Ref, Msg}, State) -> {[], State};
+websocket_info({timeout, _Ref, _Msg}, State) -> {[], State};
 websocket_info(_Info, State) -> {[], State}.

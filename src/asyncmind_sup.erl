@@ -19,7 +19,7 @@ start() -> application:start(?MODULE).
 
 stop() -> application:stop(?MODULE).
 
-start(_Type, _Args) -> supervisor:start_link({local, contextual_sup}, ?MODULE, []).
+start(_Type, _Args) -> supervisor:start_link({local, asyncmind_sup}, ?MODULE, []).
 
 stop(_State) -> ok.
 
