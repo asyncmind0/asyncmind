@@ -1,0 +1,12 @@
+[Unit]
+Description=Asyncmind service
+After=network.target
+
+[Service]
+ExecStart=/usr/lib/asyncmind/bin/asyncmind foreground -config /etc/asyncmind/sys.config
+Restart=always
+WorkingDirectory=/root/
+
+
+[Install]
+WantedBy=default.target
