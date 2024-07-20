@@ -14,7 +14,7 @@ start(_StartType, _StartArgs) ->
   {ok, _} = application:ensure_all_started(erlexec),
   {ok, _} = application:ensure_all_started(ipfs),
   {ok, _} = application:ensure_all_started(erlcron),
-  {ok, _} = application:ensure_all_started(yamerl),
+  {ok, _} = application:ensure_all_started(gproc),
   exec:start(),
   Dispatch =
     cowboy_router:compile(
@@ -31,6 +31,10 @@ start(_StartType, _StartArgs) ->
     ),
   {ok, WsPort} = application:get_env(asyncmind, ws_port),
   {ok, _} = cowboy:start_clear(http, [{port, WsPort}], #{env => #{dispatch => Dispatch}}),
+  case init:get_plain_arguments() of
+    [_, "shell"] -> sync:go();
+    _ -> ok
+  end,
   asyncmind_sup:start_link().
 
 

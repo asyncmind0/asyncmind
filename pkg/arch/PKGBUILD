@@ -31,7 +31,7 @@ package() {
   install -d "$pkgdir/var/lib/$pkgname/"
   install -d "$pkgdir/var/log/$pkgname/"
   cp -R  _build/default/rel/asyncmind/ $pkgdir/usr/lib/asyncmind/
-  install -Dm644 "$srcdir"/etc/$pkgname.service "$pkgdir"/usr/lib/systemd/system/$pkgname.service
-  install -Dm644 "$srcdir"/config/sys.config "$pkgdir"/etc/$pkgname/sys.config
+  install -Dm644 etc/$pkgname.service "$pkgdir"/usr/lib/systemd/system/$pkgname.service
+  install -Dm644 config/sys.config "$pkgdir"/etc/$pkgname/sys.config
   
 }

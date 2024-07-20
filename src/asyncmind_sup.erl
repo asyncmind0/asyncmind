@@ -53,6 +53,7 @@ start_link() -> supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 init([]) ->
   SupFlags = #{strategy => one_for_one, intensity => 3, period => 10},
+  {ok, Pools} = application:get_env(asyncmind, pools),
   ChildSpecs =
     [
       {
@@ -63,9 +64,11 @@ init([]) ->
         worker,
         [asyncmind]
       },
+      {i3, {i3, start_link, [[{local, ?SERVER}, ?MODULE, []]]}, permanent, 10000, worker, [i3]},
+      {salt, {salt, start_link, [[{local, ?SERVER}, ?MODULE, []]]}, permanent, 10000, worker, []},
       {
-        salt,
-        {salt, start_link, [[{local, ?SERVER}, ?MODULE, []]]},
+        dunst_notifier_system,
+        {salt, journal_monitor, [system, [<<".*error.*">>]]},
         permanent,
         10000,
         worker,
@@ -73,22 +76,23 @@ init([]) ->
       },
       {
         dunst_notifier_user,
-        {salt, journal_monitor, [[{local, ?SERVER}, ?MODULE, []]]},
+        {salt, journal_monitor, [user, [<<".*error.*">>]]},
         permanent,
         10000,
         worker,
-        [user]
-      },
-      {
-        dunst_notifier_system,
-        {salt, journal_monitor, [[{local, ?SERVER}, ?MODULE, []]]},
-        permanent,
-        10000,
-        worker,
-        [system]
+        []
       }
     ],
+  PoolSpecs =
+    lists:map(
+      fun
+        ({Name, SizeArgs, WorkerArgs}) ->
+          PoolArgs = [{name, {local, Name}}, {worker_module, Name}] ++ SizeArgs,
+          poolboy:child_spec(Name, PoolArgs, WorkerArgs)
+      end,
+      Pools
+    ),
   logger:info("Starting childspec ~p", [ChildSpecs]),
-  {ok, {SupFlags, ChildSpecs}}.
+  {ok, {SupFlags, ChildSpecs ++ PoolSpecs}}.
 
 %% internal functions
