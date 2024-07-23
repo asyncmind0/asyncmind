@@ -84,20 +84,28 @@ i3_is_current_workspace(Name) ->
   end.
 
 handle_call({day, on}, _From, _State) ->
-  Results = exec:run(["/usr/sbin/xset", "-dpms"], []),
-  ?LOG_INFO("dnd on ~p~n", [Results]);
+  Results = exec:run(["/usr/sbin/xset", "-dpms"], [sync, {env, [{"DISPLAY", ":0.0"}]}]),
+  ?LOG_INFO("day on ~p~n", [Results]);
 
 handle_call({night, on}, _From, _State) ->
-  Results = exec:run(["/usr/sbin/xset", "+dpms"], []),
-  ?LOG_INFO("dnd on ~p~n", [Results]);
+  Results = exec:run(["/usr/sbin/xset", "+dpms"], [sync, {env, [{"DISPLAY", ":0.0"}]}]),
+  ?LOG_INFO("night on ~p~n", [Results]);
 
 handle_call({dnd, on}, _From, State) ->
+  ScreenSaver = exec:run(["/usr/sbin/xset", "s", "60", "180"], [sync, {env, [{"DISPLAY", ":0.0"}]}]),
+  logger:info("dnd on xset screensaver ~p~n", [ScreenSaver]),
+  Dpms = exec:run(["/usr/sbin/xset", "dpms", "600", "1800"], [sync, {env, [{"DISPLAY", ":0.0"}]}]),
+  logger:info("dnd on xset dpms ~p~n", [Dpms]),
   Results = pactl_mute_all(),
 
   logger:info("dnd on ~p~n", [Results]),
   {reply, Results, State};
 
 handle_call({dnd, off}, _From, State) ->
+  ScreenSaver = exec:run(["/usr/sbin/xset", "s", "3600", "8800"], [sync, {env, [{"DISPLAY", ":0.0"}]}]),
+  logger:info("dnd off xset screensaver ~p~n", [ScreenSaver]),
+  Dpms = exec:run(["/usr/sbin/xset", "dpms", "10600", "10800"], [sync, {env, [{"DISPLAY", ":0.0"}]}]),
+  logger:info("dnd off xset dpms ~p~n", [Dpms]),
   Results = pactl_unmute_all(),
   logger:info("dnd off ~p~n", [Results]),
   {reply, Results, State};
