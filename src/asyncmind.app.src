@@ -6,10 +6,11 @@
     {vsn, "0.1.0"},
     {registered, []},
     {mod, {asyncmind_app, []}},
-    {applications, [kernel, stdlib, erlexec]},
+    {applications, [kernel, stdlib, erlexec, jsx, cowboy, trails, cowboy_swagger, gproc]},
     {env, []},
     {modules, []},
     {licenses, ["Apache 2.0"]},
+    {start_phases, [{start_trails_http, []}, {start_sync, []}]},
     {links, []}
   ]
 }.
