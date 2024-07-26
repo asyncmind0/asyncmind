@@ -64,7 +64,7 @@ init([]) ->
         worker,
         [asyncmind]
       },
-      {i3, {i3, start_link, [[{local, ?SERVER}, ?MODULE, []]]}, permanent, 10000, worker, [i3]},
+      {i3, {i3, start_link, [[{local, ?SERVER}, ?MODULE, []]]}, transient, 10000, worker, [i3]},
       {salt, {salt, start_link, [[{local, ?SERVER}, ?MODULE, []]]}, permanent, 10000, worker, []},
       {
         dunst_notifier_system,
