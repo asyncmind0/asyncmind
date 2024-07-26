@@ -83,6 +83,7 @@ i3_is_current_workspace(Name) ->
     _ -> false
   end.
 
+
 handle_call({day, on}, _From, _State) ->
   Results = exec:run(["/usr/sbin/xset", "-dpms"], [sync, {env, [{"DISPLAY", ":0.0"}]}]),
   ?LOG_INFO("day on ~p~n", [Results]);
@@ -92,19 +93,34 @@ handle_call({night, on}, _From, _State) ->
   ?LOG_INFO("night on ~p~n", [Results]);
 
 handle_call({dnd, on}, _From, State) ->
-  ScreenSaver = exec:run(["/usr/sbin/xset", "s", "60", "180"], [sync, {env, [{"DISPLAY", ":0.0"}]}]),
+  RunOpts = [sync, stderr, {env, [{"DISPLAY", ":0.0"}]}],
+  ScreenSaver = exec:run(["/usr/sbin/xset", "s", "60", "180"], RunOpts),
   logger:info("dnd on xset screensaver ~p~n", [ScreenSaver]),
-  Dpms = exec:run(["/usr/sbin/xset", "dpms", "600", "1800"], [sync, {env, [{"DISPLAY", ":0.0"}]}]),
+  Dpms = exec:run(["/usr/sbin/xset", "dpms", "600", "1800"], RunOpts),
   logger:info("dnd on xset dpms ~p~n", [Dpms]),
+  SpotifyStop =
+    exec:run(
+      [
+        "/usr/sbin/dbus-send",
+        "--print-reply",
+        "--dest",
+        "org.mpris.MediaPlayer2.spotify",
+        "/org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause"
+      ],
+      RunOpts
+    ),
+  logger:info("dnd on spotify stop ~p~n", [SpotifyStop]),
+  exec:run(["/usr/sbin//notify-send", "dnd on"], RunOpts),
   Results = pactl_mute_all(),
-
   logger:info("dnd on ~p~n", [Results]),
   {reply, Results, State};
 
 handle_call({dnd, off}, _From, State) ->
-  ScreenSaver = exec:run(["/usr/sbin/xset", "s", "3600", "8800"], [sync, {env, [{"DISPLAY", ":0.0"}]}]),
+  ScreenSaver =
+    exec:run(["/usr/sbin/xset", "s", "3600", "8800"], [sync, {env, [{"DISPLAY", ":0.0"}]}]),
   logger:info("dnd off xset screensaver ~p~n", [ScreenSaver]),
-  Dpms = exec:run(["/usr/sbin/xset", "dpms", "10600", "10800"], [sync, {env, [{"DISPLAY", ":0.0"}]}]),
+  Dpms =
+    exec:run(["/usr/sbin/xset", "dpms", "10600", "10800"], [sync, {env, [{"DISPLAY", ":0.0"}]}]),
   logger:info("dnd off xset dpms ~p~n", [Dpms]),
   Results = pactl_unmute_all(),
   logger:info("dnd off ~p~n", [Results]),
@@ -124,21 +140,21 @@ handle_call({browser, Url, Profile}, _From, State) ->
   %exec:run(["/usr/sbin/chromium", "--user-data-dir=/home/steven/.config/chromium.home", Url], []),
   Results =
     exec:run(
-      ["/usr/sbin/brave", "-–password-store=basic", "--profile-directory=" ++ Profile, Url], []
+      ["/usr/sbin/brave", "-–password-store=basic", "--profile-directory=" ++ Profile, Url],
+      []
     ),
   {reply, Results, State};
+
 handle_call({qutebrowser, Url, Profile}, _From, State) ->
   %exec:run(["/usr/sbin/chromium", "--user-data-dir=/home/steven/.config/chromium.home", Url], []),
   Ctx = [{home, "$HOME"}, {url, Url}, {profile, Profile}],
-    
   Command =
     mustache:render(
       "/usr/sbin/qutebrowser --config-py ~/.config/qutebrowser/config.py --target window --basedir=~/.local/share/qutebrowser/{{profile}} --set window.title_format {{{perc}}}{{{audio}}}{{{current_title}}}{{{title_sep}}}{{{host}}}{{{title_sep}}}[{profile}]",
       Ctx
     ),
-    ?LOG_DEBUG("Command ~p", [Command]),
-  Results =
-    exec:run(Command, []),
+  ?LOG_DEBUG("Command ~p", [Command]),
+  Results = exec:run(Command, []),
   {reply, Results, State};
 
 handle_call({st, Title, _Args}, _From, _State) ->
@@ -374,13 +390,22 @@ show_dmenu(Items) ->
 
 
 lnd(Args) -> gen_server:call(asyncmind, {lnd, Args}).
-terminal(_Args) -> 
-    Key ={n, l, {?MODULE, terminal}},
-  gproc:reg_or_locate(Key, started, fun() -> 
-    {ok, _Pid, _OsPid} = exec:run("/usr/sbin/st", [sync, {env, [{"DISPLAY", ":0.0"}]}])
- end).
+
+terminal(_Args) ->
+  Key = {n, l, {?MODULE, terminal}},
+  gproc:reg_or_locate(
+    Key,
+    started,
+    fun
+      () -> {ok, _Pid, _OsPid} = exec:run("/usr/sbin/st", [sync, {env, [{"DISPLAY", ":0.0"}]}])
+    end
+  ).
+
+
 tmux(outer) ->
-exec:run("/usr/sbin/tmux -f %h/.tmux/outer.conf -S /tmp/steven/tmux_outer_socket0 new-session -fD -P -s %i -c %h -d").
+  exec:run(
+    "/usr/sbin/tmux -f %h/.tmux/outer.conf -S /tmp/steven/tmux_outer_socket0 new-session -fD -P -s %i -c %h -d"
+  ).
 
 kubectl(Args) ->
   gen_server:call(asyncmind, {kubectl, Args}),
@@ -400,9 +425,9 @@ wait_cancel(_Args) ->
 dnd(OnOff) -> gen_server:call(asyncmind, {dnd, OnOff}).
 
 browser(Url) ->
-    gen_server:call(asyncmind, {browser, Url, "home"}),
-    
-ok.
+  gen_server:call(asyncmind, {browser, Url, "home"}),
+  ok.
+
 
 toggle_window_screen(Workspace, Title) ->
   gen_server:call(asyncmind, {i3_switch_to_workspace, [Workspace, Title]}),
