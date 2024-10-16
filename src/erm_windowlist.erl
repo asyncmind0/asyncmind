@@ -27,8 +27,10 @@
 start(Config) -> wx_object:start_link(?MODULE, Config, []).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 -define(WINDOW_WIDTH, 900).
 -define(WINDOW_HEIGHT, 800).
+
 init(Config) ->
   wx:new(),
   wx:batch(fun () -> do_init(Config) end).
@@ -73,45 +75,56 @@ do_init(Config) ->
   wxFrame:connect(Frame, key_up, []),
   % Start the main event loop
   wxFrame:show(Frame),
-  gproc:reg_other({n, l, {?MODULE, erm_keypad}}, self()),
+  gproc:reg_other({n, l, {?MODULE, erm_windowlist}}, self()),
   {Frame, #state{parent = Frame, config = Config, list = ListCtrl, windows = WindowList}}.
 
 
 close() ->
-  case gproc:lookup_local_name({?MODULE, erm_keypad}) of
+  case gproc:lookup_local_name({?MODULE, erm_windowlist}) of
     undefined -> ok;
     Pid -> wx_object:call(Pid, shutdown)
   end.
 
 
 show() ->
-  case gproc:lookup_local_name({?MODULE, erm_bar}) of
-    undefined -> ok;
+  case gproc:lookup_local_name({?MODULE, erm_windowlist}) of
+    undefined -> start([]);
     Pid -> wx_object:call(Pid, show)
   end.
 
 
-add_list_item(_, #{'QTILE_INTERNAL' := _} = _Item) -> ok;
-
-add_list_item(ListCtrl, #{'_NET_WM_NAME' := Title} = _Item) ->
-  wxListCtrl:insertItem(ListCtrl, 0, ""),
-  wxListCtrl:setItem(ListCtrl, 0, 0, Title);
-
-add_list_item(_, _Item) -> ok.
-
-
 populate_window_list(ListCtrl) ->
   % Call the NIF function to get window list
-  WindowList = x11:list_windows(),
+  WindowList =
+    lists:filter(
+      fun
+        ({_Id, Proplists}) ->
+          case proplists:get_value('WM_NORMAL_HINTS', Proplists, undefined) of
+            undefined -> false;
+
+            _ ->
+              case proplists:get_value('_NET_WM_NAME', Proplists, undefined) of
+                undefined -> false;
+                _ -> true
+              end
+          end;
+
+        (_) -> false
+      end,
+      x11:list_windows()
+    ),
   lists:foreach(
     fun
       ({WindowId, Properties}) ->
         ?LOG_DEBUG("List item ~p ~p", [WindowId, Properties]),
-        add_list_item(ListCtrl, maps:from_list(Properties))
+        Title = proplists:get_value('_NET_WM_NAME', Properties, undefined),
+        ItemCount = wxListCtrl:getItemCount(ListCtrl),
+        wxListCtrl:insertItem(ListCtrl, ItemCount, ""),
+        wxListCtrl:setItem(ListCtrl, ItemCount, 0, Title)
     end,
     WindowList
   ),
-WindowList.
+  WindowList.
 
 
 filter_windows(FilterTextBox, ListCtrl) ->
@@ -134,8 +147,6 @@ filter_windows(FilterTextBox, ListCtrl) ->
     end,
     WindowList
   ).
-
-
 
 %%%%%%%%%%%%
 %% Async Events are handled in handle_event as in handle_info
@@ -162,18 +173,22 @@ handle_event(_Ev = #wx{event = #wxKey{keyCode = 27}}, State = #state{parent = Fr
 handle_event(_Ev = #wx{event = #wxKey{keyCode = KeyCode}}, State = #state{}) ->
   ?LOG_DEBUG("Got Key Event ~p~n", [KeyCode]),
   {noreply, State};
-handle_event(_Ev = #wx{event = #wxList{itemIndex = ItemIndex}}, State = #state{parent = Frame, windows= Windows}) ->
+
+handle_event(
+  _Ev = #wx{event = #wxList{itemIndex = ItemIndex}},
+  State = #state{parent = Frame, windows = Windows}
+) ->
   ?LOG_DEBUG("Got ListItemIndex ~p~n", [ItemIndex]),
-    {WindowId, Props} = Item = lists:nth(ItemIndex, Windows),
+  {WindowId, Props} = Item = lists:nth(ItemIndex + 1, Windows),
   ?LOG_DEBUG("Got ListItem ~p~n", [Item]),
-    case proplists:get_value('_NET_WM_DESKTOP', Props) of
-        undefined ->
-            ok;
-        DesktopId ->  
-  ?LOG_DEBUG("Got desktopid ~p~n", [DesktopId]),
-    x11:switch_desktop(DesktopId)
-end,
-    x11:switch_window(WindowId),
+  case proplists:get_value('_NET_WM_DESKTOP', Props) of
+    undefined -> ok;
+
+    DesktopId ->
+      ?LOG_DEBUG("Got desktopid ~p~n", [DesktopId]),
+      x11:switch_desktop(DesktopId)
+  end,
+  x11:switch_window(WindowId),
   ?LOG_DEBUG("Got windowid ~p~n", [WindowId]),
   wxWindow:close(Frame),
   {noreply, State};
