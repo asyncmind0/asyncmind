@@ -11,7 +11,7 @@
     handle_info/2,
     terminate/2,
     code_change/3,
-    connect_i3_socket/0,
+    connect_i3_socket/1,
     send_i3_command/1,
     get_workspaces/0,
     get_current_workspace/0,
@@ -24,10 +24,20 @@
 
 -include_lib("kernel/include/logger.hrl").
 
--define(SOCKET_PATH, "/run/user/1000/i3/ipc-socket.507945").
 -define(I3ENV, {env, [{"DISPLAY", ":1.0"}]}).
+-define(HEARTBEAT_TIMER, 1000).
 
--record(state, {socket_pid = undefined, caller = undefined, recv_buffer = <<"">>}).
+-record(
+  state,
+  {
+    socket_pid = undefined,
+    caller = undefined,
+    recv_buffer = <<"">>,
+    heartbeat_timer = undefined,
+    focused_window_name = undefined,
+   env = ?I3ENV
+  }
+).
 
 %% External API
 
@@ -37,16 +47,38 @@ start_link(Args) ->
   Return.
 
 
-init([]) ->
-  case connect_i3_socket() of
-    {ok, State} ->
-      gproc:reg_other({n, l, {?MODULE, i3_ipc}}, self()),
-      {ok, State};
+subscribe_events(#state{socket_pid = SocketPid} = State) ->
+  Events =
+    [
+      <<"binding">>,
+      <<"workspace">>,
+      <<"output">>,
+      <<"mode">>,
+      <<"window">>,
+      <<"barconfig_update">>,
+      <<"shutdown">>,
+      <<"tick">>
+    ],
+  Message = format_ipc(2, jsx:encode(Events)),
+  ?LOG_INFO("Sending subscribe ~p", [Message]),
+  gen_tcp:send(SocketPid, Message),
+  State.
 
-    Error ->
-      ?LOG_INFO("i3 initializaion failed ~p", [Error]),
-      ignore
+
+start_i3(State) ->
+  case connect_i3_socket(State) of
+    {ok, State} -> subscribe_events(State);
+
+    _Error ->
+      %?LOG_INFO("i3 initializaion failed ~p", [Error]),
+      State
   end.
+
+
+init([]) ->
+  HeartbeatTimer = erlang:send_after(?HEARTBEAT_TIMER, self(), heartbeat),
+  gproc:reg_other({n, l, {?MODULE, i3_ipc}}, self()),
+  {ok, start_i3(#state{heartbeat_timer = HeartbeatTimer})}.
 
 
 handle_call(Request, _From, State) ->
@@ -57,14 +89,30 @@ handle_call(Request, _From, State) ->
 
 handle_cast(Message, State) ->
   ?LOG_DEBUG("handle_cast ~p ~p", [Message, State]),
-  %handle_i3_message(self(), Message, State),
+  handle_i3_message(self(), Message, State),
   {noreply, State#state{caller = self()}}.
 
 
+handle_info(heartbeat, #state{socket_pid = undefined} = State) ->
+  %?LOG_INFO("i3 socket disconnected.", []),
+  %% Reset the heartbeat timer
+  HeartbeatTimer = erlang:send_after(?HEARTBEAT_TIMER, self(), heartbeat),
+  {noreply, start_i3(State#state{heartbeat_timer = HeartbeatTimer})};
+
+handle_info(heartbeat, State) ->
+  Message = format_ipc(10, <<"ping">>),
+  %% Send a ping message to check the connection
+  case gen_tcp:send(State#state.socket_pid, Message) of
+    ok -> ?LOG_INFO("Heartbeat ok", []);
+    Err -> ?LOG_INFO("Heartbeat NOT ok ~p", [Err])
+  end,
+  %% Reset the heartbeat timer
+  HeartbeatTimer = erlang:send_after(?HEARTBEAT_TIMER, self(), heartbeat),
+  {noreply, subscribe_events(#state{heartbeat_timer = HeartbeatTimer})};
+
 handle_info(Message, State) ->
   %?LOG_DEBUG("handle_info ~p ~p", [Message, State]),
-  handle_i3_reply_package(self(), Message, State),
-  {noreply, State}.
+  handle_i3_reply_package(self(), Message, State).
 
 
 terminate(_Reason, _State) -> ok.
@@ -73,15 +121,15 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 %% Internal functions
 
-connect_i3_socket() ->
-  case exec:run("i3 --get-socketpath", [stdout, stderr, sync, ?I3ENV]) of
+connect_i3_socket(#state{env = Env} = State) ->
+  case exec:run("i3 --get-socketpath", [stdout, stderr, sync, Env]) of
     {ok, [{stdout, [SockPath0]}]} ->
       SockPath = lists:nth(1, string:split(SockPath0, "\n")),
-      ?LOG_INFO("i3 socket ~p", [SockPath]),
+      %?LOG_INFO("i3 socket ~p", [SockPath]),
       case gen_tcp:connect({local, SockPath}, 0, [local]) of
         {ok, SocketPid} ->
           inet:setopts(SocketPid, [{active, true}, {packet, raw}, binary]),
-          {ok, #state{socket_pid = SocketPid}};
+          {ok, State#state{socket_pid = SocketPid}};
 
         Error -> Error
       end;
@@ -109,7 +157,10 @@ get_tree() ->
   gen_server:call(Pid, tree).
 
 
-subscribe(Events) -> gen_server:cast(?MODULE, {subscribe, Events}).
+subscribe(Events) ->
+  Pid = gproc:lookup_local_name({?MODULE, i3_ipc}),
+  gen_server:call(Pid, {subscribe, Events}).
+
 
 get_outputs() -> gen_server:cast(?MODULE, get_outputs).
 
@@ -122,6 +173,7 @@ format_ipc_command(Msg) -> format_ipc(0, Msg).
 
 handle_i3_message(_Pid, {subscribe, Events}, #state{socket_pid = SocketPid} = State) ->
   Message = format_ipc(2, jsx:encode(Events)),
+  ?LOG_INFO("Sending subscribe ~p", [Message]),
   gen_tcp:send(SocketPid, Message),
   {noreply, State};
 
@@ -167,8 +219,8 @@ handle_i3_reply_package(
   case Len of
     RecvLen ->
       %% Whole message received
-      handle_i3_reply(Type, jsx:decode(Msg)),
-      {noreply, State#state{recv_buffer = <<>>}};
+      {ok, State0} = handle_i3_reply(Type, jsx:decode(Msg), State),
+      {noreply, State0#state{recv_buffer = <<>>}};
 
     _ ->
       %% Partial message received, append to buffer
@@ -176,18 +228,18 @@ handle_i3_reply_package(
       BuffLen = byte_size(NewBuffer),
       case Len of
         BuffLen ->
-          logger:debug("BuffLen ~p Mesg ~p ~p", [Len, BuffLen, Msg]),
-          handle_i3_reply(Type, jsx:decode(Msg)),
-          {noreply, State#state{recv_buffer = <<>>}};
+          %logger:debug("BuffLen ~p Mesg ~p ~p", [Len, BuffLen, Msg]),
+          {ok, State0} = handle_i3_reply(Type, jsx:decode(Msg), State),
+          {noreply, State0#state{recv_buffer = <<>>}};
 
         Other when Other < BuffLen ->
           <<Msg0:Other/binary, Rest/binary>> = Msg,
-          logger:debug("Other<BuffLen ~p Mesg ~p ~p", [Len, BuffLen, Msg]),
-          handle_i3_reply(Type, jsx:decode(Msg0)),
-          {noreply, State#state{recv_buffer = Rest}};
+          %logger:debug("Other<BuffLen ~p Mesg ~p ~p", [Len, BuffLen, Msg]),
+          {ok, State0} = handle_i3_reply(Type, jsx:decode(Msg0), State),
+          {noreply, State0#state{recv_buffer = Rest}};
 
         _Other ->
-          logger:debug("Other Len ~p Mesg ~p ~p", [Len, BuffLen, Msg]),
+          %logger:debug("Other Len ~p Mesg ~p ~p", [Len, BuffLen, Msg]),
           {noreply, State#state{recv_buffer = NewBuffer}}
       end
   end;
@@ -199,10 +251,55 @@ handle_i3_reply_package(_Pid, {tcp, _SockPid, Data}, #state{recv_buffer = Buffer
 %    Workspaces;
 handle_i3_reply_package(_SocketPid, UnknownMessage, State) ->
   % Handle any other message as per your requirements
-  logger:debug("Unknown message State ~p Mesg ~p", [State, UnknownMessage]),
+  ?LOG_DEBUG("Unknown message State ~p Mesg ~p", [State, UnknownMessage]),
   ok.
 
 
-handle_i3_reply(Type, Message) ->
-  logger:debug("i3 message ~p of type ~p", [Message, Type]),
-  ok.
+handle_i3_reply(2147483655, [{<<"first">>, false}, {<<"payload">>, <<"ping">>}] = _Message, State) ->
+  %?LOG_DEBUG("i3 ping reply ~p", [Message]),
+  {ok, State};
+
+handle_i3_reply(
+  _Type,
+  [{<<"change">>, <<"run">>}, {<<"mode">>, <<"default">>}, {<<"binding">>, Bindings}] = _Message,
+  State
+) ->
+  ?LOG_DEBUG("i3 binding message ~p", [Bindings]),
+  Symbol = proplists:get_value(<<"symbol">>, Bindings, undefined),
+  Mods = proplists:get_value(<<"mods">>, Bindings, undefined),
+  Command = proplists:get_value(<<"command">>, Bindings, undefined),
+  handle_i3_binding(Symbol, Mods, Command, State);
+
+handle_i3_reply(
+  _Type,
+  [{<<"change">>, <<"focus">>}, {<<"container">>, Container} | _Rest] = Message,
+  State
+) ->
+  WindowName = proplists:get_value(<<"name">>, Container, undefined),
+  ?LOG_DEBUG("i3 change focus window name ~p ~p", [WindowName, Message]),
+  {ok, State#state{focused_window_name = WindowName}};
+
+handle_i3_reply(
+  _Type,
+  [{<<"change">>, <<"title">>}, {<<"container">>, Container} | _Rest] = _Message,
+  State
+) ->
+  WindowProps = proplists:get_value(<<"window_properties">>, Container, undefined),
+  Title = proplists:get_value(<<"title">>, WindowProps, undefined),
+  %Title0 = io_lib:format("~ts~n", [Title]),
+  ?LOG_DEBUG("i3 change title message ~ts", [Title]),
+  {ok, State};
+
+handle_i3_reply(Type, Message, State) ->
+  ?LOG_DEBUG("i3 message ~p of type ~p", [Message, Type]),
+  {ok, State}.
+
+
+handle_i3_binding(<<"F11">>, _Mods, Command, #state{focused_window_name = Focused} = State) ->
+  ?LOG_DEBUG("i3 termwindow ~p ~p", [Focused, Command]),
+  {ok, State};
+
+handle_i3_binding(Symbol, Mods, Command, State) ->
+  ?LOG_DEBUG("i3 got symbol ~p with mods ~p and command ~p", [Symbol, Mods, Command]),
+  {ok, State}.
+
